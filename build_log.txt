@@ -1,0 +1,22 @@
+
+> courseCorrectBE@1.0.0 build
+> tsc
+
+src/app.ts(3,24): error TS2307: Cannot find module './routes/auth.routes' or its corresponding type declarations.
+src/app.ts(4,26): error TS2307: Cannot find module './routes/course.routes' or its corresponding type declarations.
+src/app.ts(5,26): error TS2307: Cannot find module './routes/lesson.routes' or its corresponding type declarations.
+src/controllers/auth.controller.ts(4,17): error TS2307: Cannot find module 'jsonwebtoken' or its corresponding type declarations.
+src/controllers/lesson.controller.ts(3,49): error TS2307: Cannot find module '../services/media.service' or its corresponding type declarations.
+src/middleware/auth.middleware.ts(2,17): error TS2307: Cannot find module 'jsonwebtoken' or its corresponding type declarations.
+src/middleware/upload.middleware.ts(1,20): error TS2307: Cannot find module 'multer' or its corresponding type declarations.
+src/middleware/upload.middleware.ts(10,16): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/middleware/upload.middleware.ts(10,21): error TS7006: Parameter 'file' implicitly has an 'any' type.
+src/middleware/upload.middleware.ts(10,27): error TS7006: Parameter 'cb' implicitly has an 'any' type.
+src/routes/auth.routes.ts(2,50): error TS2307: Cannot find module '../controllers/auth.controller' or its corresponding type declarations.
+src/routes/auth.routes.ts(3,30): error TS2307: Cannot find module '../middleware/auth.middleware' or its corresponding type declarations.
+src/routes/course.routes.ts(2,56): error TS2307: Cannot find module '../controllers/course.controller' or its corresponding type declarations.
+src/routes/course.routes.ts(3,41): error TS2307: Cannot find module '../middleware/auth.middleware' or its corresponding type declarations.
+src/routes/lesson.routes.ts(2,31): error TS2307: Cannot find module '../controllers/lesson.controller' or its corresponding type declarations.
+src/routes/lesson.routes.ts(3,24): error TS2307: Cannot find module '../middleware/upload.middleware' or its corresponding type declarations.
+src/routes/lesson.routes.ts(4,41): error TS2307: Cannot find module '../middleware/auth.middleware' or its corresponding type declarations.
+src/server.ts(1,19): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './app.js'?
