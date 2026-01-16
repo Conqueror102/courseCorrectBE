@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 // 1. Create Course
 export const createCourse = async (req, res) => {
     const { title, description, code, level, semester, session, lecturer, price } = req.body;
@@ -72,5 +71,71 @@ export const deleteCourse = async (req, res) => {
     }
     catch (error) {
         res.status(500).json({ message: 'Failed to delete course' });
+    }
+};
+// 4. Update Course (Admin)
+export const updateCourse = async (req, res) => {
+    const { id } = req.params;
+    const { title, description, code, level, semester, session, lecturer, price } = req.body;
+    try {
+        const course = await prisma.course.findUnique({ where: { id } });
+        if (!course)
+            return res.status(404).json({ message: 'Course not found' });
+        const updated = await prisma.course.update({
+            where: { id },
+            data: {
+                ...(title && { title }),
+                ...(description && { description }),
+                ...(code && { code: code.toUpperCase().trim() }),
+                ...(level && { level: level }),
+                ...(semester && { semester: semester }),
+                ...(session && { session }),
+                ...(lecturer && { lecturer }),
+                ...(price !== undefined && { price: parseFloat(price) || 0 }),
+            },
+        });
+        res.json(updated);
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Failed to update course' });
+    }
+};
+// 5. Get Course Students (Admin) - Note: With platform-wide access, this shows all students with active access
+export const getCourseStudents = async (req, res) => {
+    try {
+        // Since access is platform-wide, return all students with active enrollment
+        const students = await prisma.user.findMany({
+            where: {
+                role: 'STUDENT',
+                enrollments: {
+                    some: {
+                        isActive: true,
+                        expiresAt: { gt: new Date() }
+                    }
+                }
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                enrollments: {
+                    where: { isActive: true },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { expiresAt: true, createdAt: true }
+                }
+            }
+        });
+        const formatted = students.map(s => ({
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            accessExpiresAt: s.enrollments[0]?.expiresAt,
+            enrolledAt: s.enrollments[0]?.createdAt
+        }));
+        res.json(formatted);
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Failed to fetch students' });
     }
 };

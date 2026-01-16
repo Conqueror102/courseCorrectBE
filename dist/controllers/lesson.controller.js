@@ -1,23 +1,30 @@
-import { PrismaClient } from '@prisma/client';
-import { uploadToMux, uploadToCloudinary } from '../services/media.service';
-const prisma = new PrismaClient();
-export const uploadContent = async (req, res) => {
+import { getMuxUploadUrl, getCloudinarySignature, getAssetIdFromUpload, signMuxUrl, signCloudinaryUrl } from '../services/media.service.js';
+import { prisma } from '../lib/prisma.js';
+// 0. Get Upload URL (Step 1 for Frontend)
+export const getUploadUrl = async (req, res) => {
+    const { type } = req.body;
     try {
-        const { title, description, courseCode, level, semester, academicSession, // maps to session
-        type, 
-        // Optional
-        courseTitle, lecturer, instructions } = req.body;
-        const file = req.file;
-        if (!file) {
-            return res.status(400).json({ message: 'File is required' });
+        if (type === 'VIDEO') {
+            const url = await getMuxUploadUrl();
+            return res.json({ url, type: 'mux' });
         }
-        // 1. Process Metadata
+        else {
+            const signatureData = getCloudinarySignature(type);
+            return res.json({ ...signatureData, type: 'cloudinary' });
+        }
+    }
+    catch {
+        res.status(500).json({ message: 'Failed to generate upload URL' });
+    }
+};
+// 1. Create Lesson (Step 2: After FE uploads)
+export const createLesson = async (req, res) => {
+    try {
+        const { title, description, courseCode, level, semester, academicSession, type, courseTitle, lecturer, instructions, uploadId, publicId } = req.body;
         const code = courseCode.toUpperCase().trim();
         const session = academicSession.trim();
         const sem = semester;
         const lvl = level;
-        // 2. Find or Create Course
-        // We try to find existing first
         let course = await prisma.course.findUnique({
             where: {
                 code_session_semester_level: {
@@ -29,66 +36,236 @@ export const uploadContent = async (req, res) => {
             }
         });
         if (!course) {
-            // Create if allowed? 
-            // Requirement says "Requirements 6: Admin uploads...".
-            // Usually user expects course to exist or be created.
-            // Given provided metadata (courseTitle, lecturer), creation is implied if missing.
             course = await prisma.course.create({
                 data: {
                     code,
                     session,
                     semester: sem,
                     level: lvl,
-                    title: courseTitle || code, // Fallback
+                    title: courseTitle || code,
                     lecturer: lecturer,
-                    description: description, // Maybe course desc? Or lesson desc?
-                    // Using Lesson Description for Lesson. Course Description from metadata?
+                    description: description,
                 }
             });
         }
-        // 3. Upload File based on Type
         let fileUrl = '';
         if (type === 'VIDEO') {
-            const { playbackId } = await uploadToMux(file.buffer);
-            fileUrl = `https://stream.mux.com/${playbackId}.m3u8`; // Example Mux URL format
+            if (!uploadId)
+                return res.status(400).json({ message: 'uploadId is required for VIDEO' });
+            const { playbackId } = await getAssetIdFromUpload(uploadId);
+            if (playbackId) {
+                fileUrl = `mux:${playbackId}`;
+            }
+            else {
+                fileUrl = `mux_pending:${uploadId}`;
+            }
         }
         else {
-            // Audio or PDF
-            const resourceType = type === 'AUDIO' ? 'video' : 'raw'; // Cloudinary treats audio as video often, or raw/auto
-            const { secure_url } = await uploadToCloudinary(file.buffer, resourceType);
-            fileUrl = secure_url;
+            if (!publicId)
+                return res.status(400).json({ message: 'publicId is required for Non-Video' });
+            fileUrl = `cloudinary:${publicId}`;
         }
-        // 4. Create Lesson
         const lesson = await prisma.lesson.create({
             data: {
                 title,
                 description,
                 type: type,
                 fileUrl,
-                fileSize: file.size,
+                fileSize: 0,
                 instructions,
                 courseId: course.id,
             },
         });
-        // 5. Response
         res.status(201).json({
             id: lesson.id,
             fileUrl: lesson.fileUrl,
             uploadedAt: lesson.createdAt,
-            fileSize: lesson.fileSize,
-            metadata: {
-                title: lesson.title,
-                description: lesson.description,
-                courseCode: course.code,
-                level: course.level,
-                semester: course.semester,
-                academicSession: course.session,
-                type: lesson.type,
+            metadata: { ...req.body }
+        });
+    }
+    catch {
+        res.status(500).json({ message: 'Lesson creation failed' });
+    }
+};
+// 2. Get Lesson Content (Retrieval)
+export const getLesson = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const lesson = await prisma.lesson.findUnique({ where: { id } });
+        if (!lesson)
+            return res.status(404).json({ message: 'Lesson not found' });
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ message: 'Unauthorized' });
+        const enrollment = await prisma.enrollment.findFirst({
+            where: {
+                userId,
+                isActive: true,
+                expiresAt: { gt: new Date() }
+            }
+        });
+        const isAdmin = req.user?.role === 'ADMIN';
+        if (!enrollment && !isAdmin) {
+            return res.status(403).json({ message: 'Access Denied: No active platform access' });
+        }
+        let signedUrl = lesson.fileUrl;
+        if (lesson.fileUrl.startsWith('mux:')) {
+            const playbackId = lesson.fileUrl.split(':')[1];
+            signedUrl = signMuxUrl(playbackId);
+        }
+        else if (lesson.fileUrl.startsWith('https://stream.mux.com/')) {
+            const match = lesson.fileUrl.match(/stream\.mux\.com\/([^.]+)/);
+            if (match) {
+                const playbackId = match[1];
+                signedUrl = signMuxUrl(playbackId);
+            }
+        }
+        else if (lesson.fileUrl.startsWith('cloudinary:')) {
+            const publicId = lesson.fileUrl.split(':')[1];
+            const resourceType = lesson.type === 'PDF' ? 'raw' :
+                lesson.type === 'AUDIO' ? 'video' : 'image';
+            signedUrl = signCloudinaryUrl(publicId, resourceType);
+        }
+        res.json({
+            ...lesson,
+            fileUrl: signedUrl
+        });
+    }
+    catch {
+        res.status(500).json({ message: 'Error retrieving lesson' });
+    }
+};
+// 3. Get Course Lessons (List)
+export const getCourseLessons = async (req, res) => {
+    const { courseId } = req.params;
+    try {
+        const lessons = await prisma.lesson.findMany({
+            where: { courseId },
+            select: { id: true, title: true, type: true, description: true, createdAt: true }
+        });
+        res.json(lessons);
+    }
+    catch {
+        res.status(500).json({ message: 'Error fetching lessons' });
+    }
+};
+// 3b. Get All Lessons (Admin)
+export const getAllLessons = async (req, res) => {
+    const { page = 1, limit = 20, type, courseId } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    try {
+        const where = {};
+        if (type)
+            where.type = type;
+        if (courseId)
+            where.courseId = courseId;
+        const [lessons, total] = await prisma.$transaction([
+            prisma.lesson.findMany({
+                where,
+                skip,
+                take: Number(limit),
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    course: {
+                        select: { id: true, code: true, title: true }
+                    }
+                }
+            }),
+            prisma.lesson.count({ where })
+        ]);
+        res.json({
+            data: lessons,
+            meta: {
+                total,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages: Math.ceil(total / Number(limit))
             }
         });
     }
-    catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Upload failed', error });
+    catch {
+        res.status(500).json({ message: 'Error fetching lessons' });
+    }
+};
+// 4. Update Lesson (Admin)
+export const updateLesson = async (req, res) => {
+    const { id } = req.params;
+    const { title, description, instructions } = req.body;
+    try {
+        const lesson = await prisma.lesson.findUnique({ where: { id } });
+        if (!lesson)
+            return res.status(404).json({ message: 'Lesson not found' });
+        const updated = await prisma.lesson.update({
+            where: { id },
+            data: {
+                ...(title && { title }),
+                ...(description && { description }),
+                ...(instructions !== undefined && { instructions }),
+            },
+        });
+        res.json(updated);
+    }
+    catch {
+        res.status(500).json({ message: 'Failed to update lesson' });
+    }
+};
+// 5. Delete Lesson (Admin)
+export const deleteLesson = async (req, res) => {
+    const { id } = req.params;
+    try {
+        await prisma.lesson.delete({ where: { id } });
+        res.json({ message: 'Lesson deleted' });
+    }
+    catch {
+        res.status(500).json({ message: 'Failed to delete lesson' });
+    }
+};
+// 6. Proxy Lesson File (Streams Cloudinary files through backend)
+export const proxyLessonFile = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const lesson = await prisma.lesson.findUnique({ where: { id } });
+        if (!lesson)
+            return res.status(404).json({ message: 'Lesson not found' });
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ message: 'Unauthorized' });
+        const enrollment = await prisma.enrollment.findFirst({
+            where: {
+                userId,
+                isActive: true,
+                expiresAt: { gt: new Date() }
+            }
+        });
+        const isAdmin = req.user?.role === 'ADMIN';
+        if (!enrollment && !isAdmin) {
+            return res.status(403).json({ message: 'Access Denied: No active platform access' });
+        }
+        let fileUrl = lesson.fileUrl;
+        if (lesson.fileUrl.startsWith('cloudinary:')) {
+            const publicId = lesson.fileUrl.split(':')[1];
+            const resourceType = lesson.type === 'PDF' ? 'raw' :
+                lesson.type === 'AUDIO' ? 'video' : 'image';
+            fileUrl = signCloudinaryUrl(publicId, resourceType);
+        }
+        else if (!lesson.fileUrl.startsWith('https://res.cloudinary.com/')) {
+            return res.status(400).json({ message: 'Proxy only supports Cloudinary files.' });
+        }
+        const response = await fetch(fileUrl);
+        if (!response.ok) {
+            return res.status(response.status).json({ message: 'Failed to fetch file from storage' });
+        }
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
+        const contentLength = response.headers.get('content-length');
+        res.setHeader('Content-Type', contentType);
+        if (contentLength)
+            res.setHeader('Content-Length', contentLength);
+        const extension = lesson.type === 'PDF' ? '.pdf' : lesson.type === 'AUDIO' ? '.mp3' : '.bin';
+        res.setHeader('Content-Disposition', `inline; filename="${lesson.title}${extension}"`);
+        const arrayBuffer = await response.arrayBuffer();
+        res.send(Buffer.from(arrayBuffer));
+    }
+    catch {
+        res.status(500).json({ message: 'Error streaming file' });
     }
 };

@@ -1,7 +1,7 @@
-import { PrismaClient, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 const generateTokens = (userId, role) => {
     const accessToken = jwt.sign({ userId, role }, process.env.JWT_SECRET, { expiresIn: '15m' });
     const refreshToken = jwt.sign({ userId, role }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
@@ -10,6 +10,10 @@ const generateTokens = (userId, role) => {
 // 1. Register Student
 export const register = async (req, res) => {
     const { name, email, password } = req.body;
+    // Validate input
+    if (!name || !email || !password) {
+        return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
     try {
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser)
@@ -30,7 +34,41 @@ export const register = async (req, res) => {
         res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens });
     }
     catch (error) {
-        res.status(500).json({ message: 'Server Error' });
+        console.error('Registration error:', error);
+        // Provide more specific error messages
+        // Database doesn't exist (P1003)
+        if (error?.code === 'P1003') {
+            return res.status(500).json({
+                message: `Database does not exist. Please create the database first.`,
+                error: 'Database not found',
+                hint: 'Run: CREATE DATABASE courseCorrect; in PostgreSQL, or update DATABASE_URL in .env'
+            });
+        }
+        // Database connection errors (P1000)
+        if (error?.code === 'P1000' || error?.message?.includes('authentication')) {
+            return res.status(500).json({
+                message: 'Database connection failed. Please check your DATABASE_URL credentials in .env file',
+                error: 'Database authentication error'
+            });
+        }
+        // Database connection refused (P1001)
+        if (error?.code === 'P1001') {
+            return res.status(500).json({
+                message: 'Cannot reach database server. Please ensure PostgreSQL is running and DATABASE_URL is correct',
+                error: 'Database connection refused'
+            });
+        }
+        // Table doesn't exist (migrations not run) - P2021
+        if (error?.code === 'P2021' || error?.message?.includes('does not exist in the current database')) {
+            return res.status(500).json({
+                message: 'Database tables not found. Please run: pnpm prisma migrate dev',
+                error: 'Database schema not initialized'
+            });
+        }
+        res.status(500).json({
+            message: 'Server Error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 };
 // 2. Login

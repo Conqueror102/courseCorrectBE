@@ -1001,3 +1001,86 @@ Some errors may include additional details:
 - Access is valid for **30 days** from activation
 - With active access, users can view **all courses and lessons**
 - Admin can extend, disable, or manually grant access
+
+---
+
+## Environment Configuration
+
+### Required Environment Variables
+
+```env
+# Server
+PORT=4000
+
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+
+# JWT Authentication
+JWT_SECRET=your-secret-key
+JWT_REFRESH_SECRET=your-refresh-secret-key
+
+# Paystack Payment
+PAYSTACK_SECRET_KEY=sk_live_xxxxxxxxxxxxx
+```
+
+### Email Configuration
+
+The system supports two email providers. Set `EMAIL_PROVIDER` to choose:
+
+**Option 1: SendGrid**
+```env
+EMAIL_PROVIDER=sendgrid
+EMAIL_FROM=noreply@yourdomain.com
+SENDGRID_API_KEY=SG.xxxxxxxxxxxxx
+```
+
+**Option 2: SMTP (Nodemailer)**
+```env
+EMAIL_PROVIDER=smtp
+EMAIL_FROM=noreply@yourdomain.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+```
+
+**Common SMTP Providers:**
+| Provider | Host | Port | Secure |
+|----------|------|------|--------|
+| Gmail | smtp.gmail.com | 587 | false |
+| Outlook | smtp.office365.com | 587 | false |
+| Yahoo | smtp.mail.yahoo.com | 587 | false |
+| Zoho | smtp.zoho.com | 465 | true |
+
+*Note: For Gmail, use an App Password (not your regular password). Enable 2FA first, then generate an App Password in Google Account settings.*
+
+### Media Storage
+
+**Mux (Video Streaming)**
+```env
+MUX_TOKEN_ID=your-token-id
+MUX_TOKEN_SECRET=your-token-secret
+MUX_SIGNING_KEY=your-signing-key-id
+MUX_PRIVATE_KEY=base64-encoded-private-key
+```
+
+**Cloudinary (PDF/Audio)**
+```env
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+```
+
+*Important: Enable "Allow delivery of PDF and ZIP files" in Cloudinary Security settings.*
+
+### Webhook Configuration
+
+**Paystack Webhook:**
+- URL: `https://yourdomain.com/api/payments/webhook`
+- Events: `charge.success`
+
+**Mux Webhook (optional):**
+```env
+MUX_WEBHOOK_SECRET=your-webhook-secret
+```
