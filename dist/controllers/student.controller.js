@@ -31,9 +31,9 @@ export const getStudentDashboard = async (req, res) => {
         let contentCounts = { video: 0, audio: 0, pdf: 0 };
         if (accessStatus === 'active') {
             const lessons = await prisma.lesson.findMany();
-            contentCounts.video = lessons.filter(l => l.type === 'VIDEO').length;
-            contentCounts.audio = lessons.filter(l => l.type === 'AUDIO').length;
-            contentCounts.pdf = lessons.filter(l => l.type === 'PDF').length;
+            contentCounts.video = lessons.filter((l) => l.type === 'VIDEO').length;
+            contentCounts.audio = lessons.filter((l) => l.type === 'AUDIO').length;
+            contentCounts.pdf = lessons.filter((l) => l.type === 'PDF').length;
         }
         res.json({
             accessStatus,

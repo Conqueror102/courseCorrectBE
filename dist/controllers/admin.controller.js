@@ -25,7 +25,7 @@ export const getDashboardStats = async (req, res) => {
             orderBy: { createdAt: 'desc' },
             include: { user: { select: { name: true } }, course: { select: { code: true } } }
         });
-        const formattedActivity = recentActivity.map(e => ({
+        const formattedActivity = recentActivity.map((e) => ({
             text: `${e.user.name} enrolled in ${e.course?.code}`,
             time: e.createdAt,
             type: 'student_activated'
@@ -82,7 +82,7 @@ export const getStudents = async (req, res) => {
             prisma.user.count({ where })
         ]);
         // Format response
-        const formatted = students.map(s => {
+        const formatted = students.map((s) => {
             const lastEnrollment = s.enrollments[0];
             return {
                 id: s.id,

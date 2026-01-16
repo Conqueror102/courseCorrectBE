@@ -115,7 +115,7 @@ export const activatePasskey = async (req: Request, res: Response) => {
       if (key.isUsed) return res.status(400).json({ message: 'Passkey already used' });
   
       // Start Transaction
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         // Mark key used
         await tx.passkey.update({
           where: { id: key.id },

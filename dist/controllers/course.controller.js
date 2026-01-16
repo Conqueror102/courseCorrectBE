@@ -126,7 +126,7 @@ export const getCourseStudents = async (req, res) => {
                 }
             }
         });
-        const formatted = students.map(s => ({
+        const formatted = students.map((s) => ({
             id: s.id,
             name: s.name,
             email: s.email,

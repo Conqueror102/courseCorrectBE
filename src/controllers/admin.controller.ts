@@ -31,7 +31,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       include: { user: { select: { name: true } }, course: { select: { code: true } } }
     });
 
-    const formattedActivity = recentActivity.map(e => ({
+    const formattedActivity = recentActivity.map((e: any) => ({
       text: `${e.user.name} enrolled in ${e.course?.code}`,
       time: e.createdAt,
       type: 'student_activated'
@@ -94,7 +94,7 @@ export const getStudents = async (req: Request, res: Response) => {
     ]);
 
     // Format response
-    const formatted = students.map(s => {
+    const formatted = students.map((s: any) => {
       const lastEnrollment = s.enrollments[0];
       return {
         id: s.id,

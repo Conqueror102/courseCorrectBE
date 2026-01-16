@@ -138,7 +138,7 @@ export const getCourseStudents = async (req: Request, res: Response) => {
       }
     });
 
-    const formatted = students.map(s => ({
+    const formatted = students.map((s: any) => ({
       id: s.id,
       name: s.name,
       email: s.email,

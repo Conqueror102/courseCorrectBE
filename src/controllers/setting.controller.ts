@@ -11,7 +11,7 @@ export const getSettings = async (req: Request, res: Response) => {
     const settings = await prisma.systemSetting.findMany();
     
     // Format as object
-    const config = settings.reduce((acc, curr) => {
+    const config = settings.reduce((acc: any, curr: any) => {
       acc[curr.key] = curr.value;
       return acc;
     }, {} as Record<string, string>);
