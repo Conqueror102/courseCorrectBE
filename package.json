@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "prisma generate && tsc",
+    "build": "prisma migrate dev && prisma generate && tsc",
     "start": "node dist/server.js",
     "db:create": "tsx scripts/create-database.ts",
     "db:migrate": "prisma migrate dev",
