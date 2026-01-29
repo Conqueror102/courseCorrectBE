@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "db:create": "tsx scripts/create-database.ts",
     "db:migrate": "prisma migrate dev",
-    "db:setup": "pnpm db:create && pnpm db:migrate"
+    "db:setup": "pnpm db:create && pnpm db:migrate",
+    "db:admin": "tsx scripts/create-admin.ts"
   },
   "keywords": [],
   "author": "",

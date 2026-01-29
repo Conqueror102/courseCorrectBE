@@ -16,6 +16,15 @@ export const app = express();
 
 app.use(cors());
 
+// Request logger
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    res.on('finish', () => {
+        console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode}`);
+    });
+    next();
+});
+
 // Webhooks often need raw body, so we group them or handle them carefully
 app.use('/api/webhooks', webhookRoutes);
 

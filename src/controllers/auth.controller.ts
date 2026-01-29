@@ -101,6 +101,36 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
+// 4. Admin Login
+export const adminLogin = async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  try {
+    // Check if credentials match environment variables (specific request)
+    // Or just check if the user exists in DB with ADMIN role.
+    // We'll do BOTH to be safe: check DB first, and ensure they are ADMIN.
+    
+    const user = await prisma.user.findUnique({ where: { email } });
+    
+    if (!user || user.role !== Role.ADMIN) {
+      return res.status(401).json({ message: 'Invalid admin credentials' });
+    }
+
+    const validPassword = await argon2.verify(user.password, password);
+    if (!validPassword) return res.status(401).json({ message: 'Invalid admin credentials' });
+
+    const tokens = generateTokens(user.id, user.role);
+
+    res.json({ 
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }, 
+      ...tokens 
+    });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
 // 3. Activate Passkey
 export const activatePasskey = async (req: Request, res: Response) => {
     const { passkey } = req.body;

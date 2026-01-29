@@ -1,0 +1,41 @@
+
+> course-correct-be@1.0.0 db:admin C:\Users\Victo\Documents\courseCorrectBE
+> tsx scripts/create-admin.ts
+
+[dotenv@17.2.3] injecting env (23) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+Error creating admin user: PrismaClientKnownRequestError: 
+Invalid `prisma.user.findUnique()` invocation in
+C:\Users\Victo\Documents\courseCorrectBE\scripts\create-admin.ts:18:45
+
+  15 }
+  16 
+  17 try {
+→ 18   const existingAdmin = await prisma.user.findUnique(
+Server has closed the connection.
+    at qr.handleRequestError (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at qr.handleAndLogRequestError (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at qr.request (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:805:24)
+    at async createAdmin (C:\Users\Victo\Documents\courseCorrectBE\scripts\create-admin.ts:18:27) {
+  code: 'P1017',
+  meta: {
+    modelName: 'User',
+    driverAdapterError: DriverAdapterError: ConnectionClosed
+        at PrismaPgAdapter.onError (file:///C:/Users/Victo/Documents/courseCorrectBE/node_modules/.pnpm/@prisma+adapter-pg@7.2.0/node_modules/@prisma/adapter-pg/dist/index.mjs:651:11)
+        at PrismaPgAdapter.performIO (file:///C:/Users/Victo/Documents/courseCorrectBE/node_modules/.pnpm/@prisma+adapter-pg@7.2.0/node_modules/@prisma/adapter-pg/dist/index.mjs:646:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        at async PrismaPgAdapter.queryRaw (file:///C:/Users/Victo/Documents/courseCorrectBE/node_modules/.pnpm/@prisma+adapter-pg@7.2.0/node_modules/@prisma/adapter-pg/dist/index.mjs:566:30)
+        at async <anonymous> (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async fr (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:190:26)
+        at async e.interpretNode (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:217:41)
+        at async e.interpretNode (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:276:41)
+        at async e.run (C:\Users\Victo\Documents\courseCorrectBE\node_modules\.pnpm\@prisma+client@7.2.0_prisma_fb6660e619411de607f51777ac2e03d2\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:96:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '7.2.0'
+}
+ ELIFECYCLE  Command failed with exit code 1.

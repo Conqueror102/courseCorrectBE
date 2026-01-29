@@ -27,7 +27,8 @@ interface PaystackVerifyResponse {
 export const initializePayment = async (
     email: string, 
     amount: number,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
+    callback_url?: string
 ): Promise<PaystackInitResponse> => {
     const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
         method: 'POST',
@@ -39,13 +40,24 @@ export const initializePayment = async (
             email,
             amount, // Amount in kobo
             metadata,
+            callback_url,
             channels: ['card', 'bank', 'ussd', 'bank_transfer'],
         }),
     });
 
-    const data = await response.json();
+    const contentType = response.headers.get('content-type');
+    let data: any;
+    
+    if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+    } else {
+        const text = await response.text();
+        console.error('Paystack returned non-JSON response:', text);
+        throw new Error(`Paystack returned unexpected response (Status: ${response.status})`);
+    }
 
     if (!response.ok || !data.status) {
+        console.error('Paystack initialization failed:', data);
         throw new Error(data.message || 'Failed to initialize payment');
     }
 
@@ -67,9 +79,19 @@ export const verifyPayment = async (reference: string): Promise<PaystackVerifyRe
         },
     });
 
-    const data = await response.json();
+    const contentType = response.headers.get('content-type');
+    let data: any;
+    
+    if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+    } else {
+        const text = await response.text();
+        console.error('Paystack verify returned non-JSON response:', text);
+        throw new Error(`Paystack verify returned unexpected response (Status: ${response.status})`);
+    }
 
     if (!response.ok) {
+        console.error('Paystack verification failed:', data);
         throw new Error(data.message || 'Failed to verify payment');
     }
 

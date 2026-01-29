@@ -227,3 +227,135 @@ export const grantAccess = async (req: Request, res: Response) => {
       res.status(500).json({ message: 'Failed to grant access', error });
   }
 };
+
+// 5. List Transactions (Backend for Admin Tracking)
+export const getTransactions = async (req: Request, res: Response) => {
+  const { page = 1, limit = 10, status, search } = req.query;
+  const skip = (Number(page) - 1) * Number(limit);
+
+  try {
+    const where: any = {};
+
+    if (status) {
+      where.status = String(status);
+    }
+
+    if (search) {
+      where.OR = [
+        { reference: { contains: String(search), mode: 'insensitive' } },
+        { user: { name: { contains: String(search), mode: 'insensitive' } } },
+        { user: { email: { contains: String(search), mode: 'insensitive' } } }
+      ];
+    }
+
+    const [transactions, total] = await prisma.$transaction([
+      prisma.payment.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          course: {
+            select: {
+              code: true,
+              title: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.payment.count({ where })
+    ]);
+
+    res.json({
+      data: transactions,
+      meta: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Failed to fetch transactions:', error);
+    res.status(500).json({ message: 'Failed to fetch transactions' });
+  }
+};
+
+// 6. Transaction Statistics
+export const getTransactionStats = async (req: Request, res: Response) => {
+  try {
+    // Total Revenue (Successful payments)
+    const revenueResult = await prisma.payment.aggregate({
+      where: { status: 'success' },
+      _sum: { amount: true }
+    });
+
+    const totalRevenue = revenueResult._sum.amount || 0;
+
+    // Total Transactions count
+    const totalTransactions = await prisma.payment.count();
+    
+    // Successful Transactions count
+    const successfulTransactions = await prisma.payment.count({
+      where: { status: 'success' }
+    });
+
+    // Failed/Pending count
+    const pendingTransactions = await prisma.payment.count({
+      where: { status: 'pending' }
+    });
+
+    // Daily revenue for the last 7 days (Chart data)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const dailyRevenue = await prisma.payment.findMany({
+      where: {
+        status: 'success',
+        createdAt: { gte: sevenDaysAgo }
+      },
+      select: {
+        amount: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // Grouping by date in memory for simpler chart data format
+    const chartData = dailyRevenue.reduce((acc: any, curr: any) => {
+      const date = curr.createdAt.toISOString().split('T')[0];
+      if (!acc[date]) {
+        acc[date] = 0;
+      }
+      acc[date] += curr.amount;
+      return acc;
+    }, {});
+
+    const formattedChartData = Object.keys(chartData).map(date => ({
+      date,
+      revenue: chartData[date]
+    }));
+
+    res.json({
+      summary: {
+        totalRevenue,
+        totalTransactions,
+        successfulTransactions,
+        pendingTransactions,
+        successRate: totalTransactions > 0 ? (successfulTransactions / totalTransactions) * 100 : 0
+      },
+      chartData: formattedChartData
+    });
+  } catch (error) {
+    console.error('Failed to fetch transaction stats:', error);
+    res.status(500).json({ message: 'Failed to fetch transaction stats' });
+  }
+};
+

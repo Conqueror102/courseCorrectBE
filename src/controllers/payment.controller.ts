@@ -11,8 +11,14 @@ export const initPayment = async (req: Request, res: Response) => {
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
     try {
+        console.log('Initializing payment for user:', user.id);
         const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
-        if (!dbUser) return res.status(404).json({ message: 'User not found' });
+        if (!dbUser) {
+            console.log('User not found in DB:', user.id);
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        console.log('User email:', dbUser.email);
 
         // Check if user already has active access
         const existingEnrollment = await prisma.enrollment.findFirst({
@@ -24,6 +30,7 @@ export const initPayment = async (req: Request, res: Response) => {
         });
 
         if (existingEnrollment) {
+            console.log('User already has active access until:', existingEnrollment.expiresAt);
             return res.status(400).json({ 
                 message: 'You already have active platform access',
                 expiresAt: existingEnrollment.expiresAt
@@ -31,17 +38,38 @@ export const initPayment = async (req: Request, res: Response) => {
         }
 
         // Get platform price from settings
+        console.log('Fetching PLATFORM_PRICE setting...');
         const priceSetting = await prisma.systemSetting.findUnique({ 
             where: { key: 'PLATFORM_PRICE' } 
         });
         const platformPrice = priceSetting ? parseFloat(priceSetting.value) : 5000;
+        console.log('Platform price:', platformPrice);
+        
+        if (isNaN(platformPrice)) {
+            console.error('Invalid platform price in settings:', priceSetting?.value);
+            throw new Error('Invalid platform price configuration');
+        }
+
         const amount = platformPrice * 100; // Paystack expects kobo
+        console.log('Amount in kobo:', amount);
 
-        const paymentData = await initializePayment(dbUser.email, amount, {
-            userId: user.id,
-            type: 'platform_access'
-        });
+        const { callback_url } = req.body;
 
+        console.log('Calling Paystack initialization...');
+        if (callback_url) console.log('Using callback URL:', callback_url);
+
+        const paymentData = await initializePayment(
+            dbUser.email, 
+            amount, 
+            {
+                userId: user.id,
+                type: 'platform_access'
+            },
+            callback_url
+        );
+        console.log('Paystack response:', paymentData);
+
+        console.log('Creating payment record in DB...');
         await prisma.payment.create({
             data: {
                 userId: user.id,
@@ -50,10 +78,15 @@ export const initPayment = async (req: Request, res: Response) => {
                 status: 'pending',
             }
         });
+        console.log('Payment record created successfully');
 
         res.json(paymentData);
-    } catch {
-        res.status(500).json({ message: 'Payment initialization failed' });
+    } catch (error: any) {
+        console.error('Payment initialization error:', error);
+        res.status(500).json({ 
+            message: 'Payment initialization failed',
+            error: error.message 
+        });
     }
 };
 
@@ -88,8 +121,12 @@ export const verifyPaymentStatus = async (req: Request, res: Response) => {
         }
 
         res.json({ status: verification.data.status });
-    } catch {
-        res.status(500).json({ message: 'Payment verification failed' });
+    } catch (error: any) {
+        console.error('Payment verification error:', error);
+        res.status(500).json({ 
+            message: 'Payment verification failed',
+            error: error.message
+        });
     }
 };
 
