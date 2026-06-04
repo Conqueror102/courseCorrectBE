@@ -84,8 +84,7 @@ export const initPayment = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Payment initialization error:', error);
         res.status(500).json({ 
-            message: 'Payment initialization failed',
-            error: error.message 
+            message: 'Payment initialization failed'
         });
     }
 };
@@ -116,7 +115,12 @@ export const verifyPaymentStatus = async (req: Request, res: Response) => {
         const verification = await verifyPayment(reference);
 
         if (verification.data.status === 'success') {
-            await processSuccessfulPayment(payment.id, payment.userId);
+            await processSuccessfulPayment(
+                payment.id,
+                payment.userId,
+                verification.data.amount,
+                verification.data.customer.email
+            );
             return res.json({ status: 'success', message: 'Payment verified' });
         }
 
@@ -124,8 +128,7 @@ export const verifyPaymentStatus = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Payment verification error:', error);
         res.status(500).json({ 
-            message: 'Payment verification failed',
-            error: error.message
+            message: 'Payment verification failed'
         });
     }
 };
@@ -139,12 +142,17 @@ export const paystackWebhook = async (req: Request, res: Response) => {
     }
 
     // Validate webhook signature
-    const payload = JSON.stringify(req.body);
+    const payload = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
     if (!validateWebhookSignature(payload, signature)) {
         return res.status(401).send('Invalid signature');
     }
 
-    const event = req.body;
+    let event: any;
+    try {
+        event = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
+    } catch {
+        return res.status(400).send('Invalid payload');
+    }
 
     if (event.event === 'charge.success') {
         const { reference } = event.data;
@@ -160,7 +168,12 @@ export const paystackWebhook = async (req: Request, res: Response) => {
                 return res.status(200).send('Already processed');
             }
 
-            await processSuccessfulPayment(payment.id, payment.userId);
+            await processSuccessfulPayment(
+                payment.id,
+                payment.userId,
+                event.data.amount,
+                event.data.customer?.email
+            );
         } catch {
             return res.status(500).send('Processing error');
         }
@@ -170,42 +183,97 @@ export const paystackWebhook = async (req: Request, res: Response) => {
 };
 
 // Helper: Process successful payment
-async function processSuccessfulPayment(paymentId: string, userId: string) {
-    await prisma.payment.update({
-        where: { id: paymentId },
-        data: { status: 'success' },
-    });
-
-    const setting = await prisma.systemSetting.findUnique({
-        where: { key: 'ACCESS_MODE' }
-    });
-    const mode = setting?.value || 'DIRECT';
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return;
-
-    if (mode === 'DIRECT') {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30);
-
-        await prisma.enrollment.create({
-            data: {
-                userId,
-                isActive: true,
-                expiresAt,
-            }
+async function processSuccessfulPayment(
+    paymentId: string,
+    userId: string,
+    paidAmountKobo?: number,
+    customerEmail?: string
+) {
+    const emailToSend = await prisma.$transaction(async (tx) => {
+        const payment = await tx.payment.findUnique({
+            where: { id: paymentId },
+            include: { user: true },
         });
-    } else {
-        const passkey = generatePasskey(user.name);
 
-        await prisma.passkey.create({
+        if (!payment || payment.status === 'success') {
+            return null;
+        }
+
+        const expectedAmountKobo = Math.round(Number(payment.amount) * 100);
+        if (paidAmountKobo !== undefined && paidAmountKobo !== expectedAmountKobo) {
+            throw new Error('Payment amount mismatch');
+        }
+
+        if (
+            customerEmail &&
+            payment.user.email.toLowerCase() !== customerEmail.toLowerCase()
+        ) {
+            throw new Error('Payment customer mismatch');
+        }
+
+        const claimed = await tx.payment.updateMany({
+            where: {
+                id: paymentId,
+                status: { not: 'success' },
+            },
+            data: { status: 'processing' },
+        });
+
+        if (claimed.count === 0) {
+            return null;
+        }
+
+        const setting = await tx.systemSetting.findUnique({
+            where: { key: 'ACCESS_MODE' }
+        });
+        const mode = setting?.value || 'DIRECT';
+
+        if (mode === 'DIRECT') {
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 30);
+
+            await tx.enrollment.create({
+                data: {
+                    userId,
+                    isActive: true,
+                    expiresAt,
+                }
+            });
+
+            await tx.payment.update({
+                where: { id: paymentId },
+                data: { status: 'success' },
+            });
+
+            return null;
+        }
+
+        const passkey = generatePasskey(payment.user.name);
+
+        await tx.passkey.create({
             data: {
                 code: passkey,
                 generatedBy: userId,
-                userEmail: user.email,
+                userEmail: payment.user.email,
             }
         });
 
-        await sendPasskeyEmail(user.email, user.name, passkey);
+        await tx.payment.update({
+            where: { id: paymentId },
+            data: { status: 'success' },
+        });
+
+        return {
+            email: payment.user.email,
+            name: payment.user.name,
+            passkey,
+        };
+    });
+
+    if (emailToSend) {
+        const sent = await sendPasskeyEmail(emailToSend.email, emailToSend.name, emailToSend.passkey);
+        if (!sent) {
+            console.error('Payment processed, but passkey email failed to send');
+        }
     }
 }

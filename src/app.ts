@@ -8,6 +8,7 @@ import settingRoutes from "./routes/setting.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
+import { paystackWebhook } from "./controllers/payment.controller.js";
 
 
 
@@ -27,6 +28,7 @@ app.use((req, res, next) => {
 
 // Webhooks often need raw body, so we group them or handle them carefully
 app.use('/api/webhooks', webhookRoutes);
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), paystackWebhook);
 
 app.use(express.json());
 

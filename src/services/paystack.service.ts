@@ -3,6 +3,14 @@ import { env } from '../config/env.js';
 
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
+const getPaystackSecret = (): string => {
+    if (!env.PAYSTACK_SECRET_KEY) {
+        throw new Error('PAYSTACK_SECRET_KEY is not configured');
+    }
+
+    return env.PAYSTACK_SECRET_KEY;
+};
+
 interface PaystackInitResponse {
     authorization_url: string;
     access_code: string;
@@ -33,7 +41,7 @@ export const initializePayment = async (
     const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${env.PAYSTACK_SECRET_KEY}`,
+            'Authorization': `Bearer ${getPaystackSecret()}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -72,10 +80,10 @@ export const initializePayment = async (
  * Verify a Paystack payment transaction
  */
 export const verifyPayment = async (reference: string): Promise<PaystackVerifyResponse> => {
-    const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/verify/${reference}`, {
+    const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/verify/${encodeURIComponent(reference)}`, {
         method: 'GET',
         headers: {
-            'Authorization': `Bearer ${env.PAYSTACK_SECRET_KEY}`,
+            'Authorization': `Bearer ${getPaystackSecret()}`,
         },
     });
 
@@ -111,11 +119,18 @@ export const verifyPayment = async (reference: string): Promise<PaystackVerifyRe
 /**
  * Validate Paystack webhook signature
  */
-export const validateWebhookSignature = (payload: string, signature: string): boolean => {
+export const validateWebhookSignature = (payload: string | Buffer, signature: string): boolean => {
     const hash = crypto
-        .createHmac('sha512', env.PAYSTACK_SECRET_KEY)
+        .createHmac('sha512', getPaystackSecret())
         .update(payload)
         .digest('hex');
-    
-    return hash === signature;
+
+    const hashBuffer = Buffer.from(hash, 'hex');
+    const signatureBuffer = Buffer.from(signature, 'hex');
+
+    if (hashBuffer.length !== signatureBuffer.length) {
+        return false;
+    }
+
+    return crypto.timingSafeEqual(hashBuffer, signatureBuffer);
 };
