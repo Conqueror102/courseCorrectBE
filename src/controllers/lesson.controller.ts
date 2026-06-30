@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Level, Semester, ContentType } from '@prisma/client';
+import { Semester, ContentType } from '@prisma/client';
 import { getMuxUploadUrl, getCloudinarySignature, getAssetIdFromUpload, signMuxUrl, signCloudinaryUrl } from '../services/media.service.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -41,7 +41,7 @@ export const createLesson = async (req: Request, res: Response) => {
     const code = (courseCode as string).toUpperCase().trim();
     const session = (academicSession as string).trim();
     const sem = semester as Semester;
-    const lvl = level as Level;
+    const lvl = String(level);
     
     let course = await prisma.course.findUnique({
       where: {

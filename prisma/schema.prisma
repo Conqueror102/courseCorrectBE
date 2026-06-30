@@ -24,7 +24,7 @@ model Course {
   code        String
   title       String?
   description String?
-  level       Level
+  level       String
   semester    Semester
   session     String
   lecturer    String?
@@ -92,17 +92,18 @@ model SystemSetting {
   value String
 }
 
+model CourseOption {
+  id        String   @id @default(uuid())
+  type      String // "LEVEL" | "SESSION"
+  value     String
+  createdAt DateTime @default(now())
+
+  @@unique([type, value])
+}
+
 enum Role {
   STUDENT
   ADMIN
-}
-
-enum Level {
-  L_100 @map("100")
-  L_200 @map("200")
-  L_300 @map("300")
-  L_400 @map("400")
-  L_500 @map("500")
 }
 
 enum Semester {

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Level, Semester } from '@prisma/client';
+import { Semester } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 
 // 1. Create Course
@@ -44,13 +44,97 @@ export const createCourse = async (req: Request, res: Response) => {
   }
 };
 
+// Helper: fetch the admin-managed option list for a given type.
+const fetchOptions = (type: 'LEVEL' | 'SESSION', order: 'asc' | 'desc') =>
+  prisma.courseOption.findMany({
+    where: { type },
+    orderBy: { value: order },
+  });
+
+// 1b. Get the managed list of levels (for forms/filters)
+export const getCourseLevels = async (_req: Request, res: Response) => {
+  try {
+    const rows = await fetchOptions('LEVEL', 'asc');
+    res.json(rows.map((row) => row.value));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Failed to fetch levels' });
+  }
+};
+
+// 1c. Get the managed list of sessions (for forms/filters)
+export const getCourseSessions = async (_req: Request, res: Response) => {
+  try {
+    const rows = await fetchOptions('SESSION', 'desc');
+    res.json(rows.map((row) => row.value));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Failed to fetch sessions' });
+  }
+};
+
+// 1c-2. Get full managed options (admin) — [{ id, type, value }] for management UI
+export const getCourseOptions = async (_req: Request, res: Response) => {
+  try {
+    const options = await prisma.courseOption.findMany({
+      orderBy: [{ type: 'asc' }, { value: 'asc' }],
+    });
+    res.json(options);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Failed to fetch options' });
+  }
+};
+
+// 1d. Add a managed option (admin) — { type: 'LEVEL' | 'SESSION', value }
+export const addCourseOption = async (req: Request, res: Response) => {
+  const { type, value } = req.body;
+  const normalizedType = String(type || '').toUpperCase();
+  const normalizedValue = String(value || '').trim();
+
+  if (normalizedType !== 'LEVEL' && normalizedType !== 'SESSION') {
+    return res.status(400).json({ message: 'type must be LEVEL or SESSION' });
+  }
+  if (!normalizedValue) {
+    return res.status(400).json({ message: 'value is required' });
+  }
+
+  try {
+    const option = await prisma.courseOption.create({
+      data: { type: normalizedType, value: normalizedValue },
+    });
+    res.status(201).json(option);
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ message: 'That option already exists' });
+    }
+    console.error(error);
+    res.status(500).json({ message: 'Failed to add option' });
+  }
+};
+
+// 1e. Delete a managed option (admin)
+export const deleteCourseOption = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await prisma.courseOption.delete({ where: { id } });
+    res.json({ message: 'Option deleted' });
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+      return res.status(404).json({ message: 'Option not found' });
+    }
+    console.error(error);
+    res.status(500).json({ message: 'Failed to delete option' });
+  }
+};
+
 // 2. Get Courses (Filterable)
 export const getCourses = async (req: Request, res: Response) => {
   const { level, semester, session } = req.query;
 
   try {
     const where: any = {};
-    if (level) where.level = level as Level;
+    if (level) where.level = String(level);
     if (semester) where.semester = semester as Semester;
     if (session) where.session = String(session);
 
@@ -97,7 +181,7 @@ export const updateCourse = async (req: Request, res: Response) => {
         ...(title && { title }),
         ...(description && { description }),
         ...(code && { code: code.toUpperCase().trim() }),
-        ...(level && { level: level as Level }),
+        ...(level && { level: String(level) }),
         ...(semester && { semester: semester as Semester }),
         ...(session && { session }),
         ...(lecturer && { lecturer }),
