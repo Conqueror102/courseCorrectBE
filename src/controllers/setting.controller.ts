@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 
 export const SETTING_KEYS = {
   ACCESS_MODE: 'ACCESS_MODE', // 'PASSKEY' | 'DIRECT'
+  PLATFORM_PRICE: 'PLATFORM_PRICE', // Naira amount for 30-day access
 };
 
 // Get Settings
@@ -20,6 +21,9 @@ export const getSettings = async (req: Request, res: Response) => {
     if (!config[SETTING_KEYS.ACCESS_MODE]) {
         config[SETTING_KEYS.ACCESS_MODE] = 'DIRECT'; // Default to Direct? Or Passkey? Let's say Passkey as per user insistence on implementing both.
     }
+    if (!config[SETTING_KEYS.PLATFORM_PRICE]) {
+        config[SETTING_KEYS.PLATFORM_PRICE] = '5000'; // Matches the payment controller fallback
+    }
 
     res.json(config);
   } catch (error) {
@@ -36,6 +40,13 @@ export const updateSetting = async (req: Request, res: Response) => {
 
   if (!Object.values(SETTING_KEYS).includes(key)) {
     return res.status(400).json({ message: 'Invalid setting key' });
+  }
+
+  if (key === SETTING_KEYS.PLATFORM_PRICE) {
+    const price = parseFloat(value);
+    if (isNaN(price) || price < 0) {
+      return res.status(400).json({ message: 'Price must be a non-negative number' });
+    }
   }
 
   try {
