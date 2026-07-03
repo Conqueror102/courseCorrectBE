@@ -110,6 +110,56 @@ export const signMuxUrl = (playbackId: string): string => {
 };
 
 /**
+ * Delete a Mux asset given a stored fileUrl.
+ * Handles `mux:<playbackId>`, `mux_pending:<uploadId>` and legacy
+ * `https://stream.mux.com/<playbackId>...` formats. Best-effort: never throws.
+ */
+export const deleteMuxAsset = async (fileUrl: string): Promise<void> => {
+    try {
+        let assetId: string | null = null;
+
+        if (fileUrl.startsWith('mux_pending:')) {
+            const uploadId = fileUrl.split(':')[1];
+            ({ assetId } = await getAssetIdFromUpload(uploadId));
+        } else {
+            let playbackId: string | null = null;
+            if (fileUrl.startsWith('mux:')) {
+                playbackId = fileUrl.split(':')[1];
+            } else if (fileUrl.startsWith('https://stream.mux.com/')) {
+                playbackId = fileUrl.match(/stream\.mux\.com\/([^.?]+)/)?.[1] || null;
+            }
+
+            if (playbackId && !playbackId.startsWith('pending_')) {
+                const playback = await mux.video.playbackIds.retrieve(playbackId);
+                assetId = playback.object?.id || null;
+            }
+        }
+
+        if (assetId) {
+            await mux.video.assets.delete(assetId);
+        }
+    } catch (error: any) {
+        console.error('Failed to delete Mux asset:', error?.message, error);
+    }
+};
+
+/**
+ * Delete a Cloudinary file given a stored `cloudinary:<publicId>` fileUrl.
+ * resourceType must match what was used at upload time. Best-effort: never throws.
+ */
+export const deleteCloudinaryFile = async (fileUrl: string, type: string): Promise<void> => {
+    try {
+        const publicId = fileUrl.split(':')[1];
+        if (!publicId) return;
+
+        const resourceType = type === 'PDF' ? 'raw' : 'video';
+        await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+    } catch (error: any) {
+        console.error('Failed to delete Cloudinary file:', error?.message, error);
+    }
+};
+
+/**
  * Generate Cloudinary URL
  */
 export const signCloudinaryUrl = (publicId: string, resourceType: 'video' | 'image' | 'raw'): string => {

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { Semester, ContentType } from '@prisma/client';
-import { getMuxUploadUrl, getCloudinarySignature, getAssetIdFromUpload, signMuxUrl, signCloudinaryUrl } from '../services/media.service.js';
+import { getMuxUploadUrl, getCloudinarySignature, getAssetIdFromUpload, signMuxUrl, signCloudinaryUrl, deleteMuxAsset, deleteCloudinaryFile } from '../services/media.service.js';
 import { prisma } from '../lib/prisma.js';
 
 // 0. Get Upload URL (Step 1 for Frontend)
@@ -15,7 +15,8 @@ export const getUploadUrl = async (req: Request, res: Response) => {
             const signatureData = getCloudinarySignature(type);
             return res.json({ ...signatureData, type: 'cloudinary' });
         }
-    } catch {
+    } catch (error: any) {
+        console.error('Upload URL generation failed:', error?.message, error);
         res.status(500).json({ message: 'Failed to generate upload URL' });
     }
 };
@@ -244,6 +245,17 @@ export const deleteLesson = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     try {
+        const lesson = await prisma.lesson.findUnique({ where: { id } });
+        if (!lesson) return res.status(404).json({ message: 'Lesson not found' });
+
+        // Remove the underlying media before dropping the DB record.
+        // Best-effort: a media-delete failure should not block the lesson delete.
+        if (lesson.type === 'VIDEO') {
+            await deleteMuxAsset(lesson.fileUrl);
+        } else if (lesson.fileUrl.startsWith('cloudinary:')) {
+            await deleteCloudinaryFile(lesson.fileUrl, lesson.type);
+        }
+
         await prisma.lesson.delete({ where: { id } });
         res.json({ message: 'Lesson deleted' });
     } catch {
