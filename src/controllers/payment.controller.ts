@@ -174,7 +174,8 @@ export const paystackWebhook = async (req: Request, res: Response) => {
                 event.data.amount,
                 event.data.customer?.email
             );
-        } catch {
+        } catch (error: any) {
+            console.error('Webhook processing error for reference', reference, ':', error?.message, error);
             return res.status(500).send('Processing error');
         }
     }
