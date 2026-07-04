@@ -201,8 +201,11 @@ async function processSuccessfulPayment(
         }
 
         const expectedAmountKobo = Math.round(Number(payment.amount) * 100);
-        if (paidAmountKobo !== undefined && paidAmountKobo !== expectedAmountKobo) {
-            throw new Error('Payment amount mismatch');
+        // Accept exact and overpayment; only reject a genuine underpayment.
+        // Transfers (OPay etc.) can settle at a slightly different amount than
+        // was requested, so an exact-match check leaves them permanently stuck.
+        if (paidAmountKobo !== undefined && paidAmountKobo < expectedAmountKobo) {
+            throw new Error(`Payment amount too low: paid=${paidAmountKobo} expected=${expectedAmountKobo}`);
         }
 
         if (
