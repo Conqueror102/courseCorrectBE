@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { Role } from '@prisma/client';
 import argon2 from 'argon2';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 
-const generateTokens = (userId: string, role: Role) => {
-  const accessToken = jwt.sign({ userId, role }, process.env.JWT_SECRET as string, { expiresIn: '15m' });
-  const refreshToken = jwt.sign({ userId, role }, process.env.JWT_REFRESH_SECRET as string, { expiresIn: '7d' });
+const generateTokens = (userId: string, role: Role, deviceId?: string) => {
+  const accessToken = jwt.sign({ userId, role, deviceId }, process.env.JWT_SECRET as string, { expiresIn: '15m' });
+  const refreshToken = jwt.sign({ userId, role, deviceId }, process.env.JWT_REFRESH_SECRET as string, { expiresIn: '7d' });
   return { accessToken, refreshToken };
 };
 
@@ -34,13 +35,19 @@ export const register = async (req: Request, res: Response) => {
       },
     });
 
-    // Create pending payment or respond? 
+    // Create pending payment or respond?
     // Requirement 1: "Create pending student record and initiate Paystack payment session"
     // For now, simple registration.
-    
-    const tokens = generateTokens(user.id, user.role);
 
-    res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens });
+    const deviceId = String(req.body.deviceId || '') || crypto.randomUUID();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { activeDeviceId: deviceId, deviceLastSeenAt: new Date() },
+    });
+
+    const tokens = generateTokens(user.id, user.role, deviceId);
+
+    res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, deviceId, ...tokens });
   } catch (error: any) {
     console.error('Registration error:', error);
     
@@ -93,11 +100,54 @@ export const login = async (req: Request, res: Response) => {
     const validPassword = await argon2.verify(user.password, password);
     if (!validPassword) return res.status(401).json({ message: 'Invalid credentials' });
 
+    // Single-device rule (students only): the account stays bound to the device
+    // that logged in until that device logs out or an admin resets the lock.
+    if (user.role === Role.STUDENT) {
+      const deviceId = String(req.body.deviceId || '') || crypto.randomUUID();
+
+      if (user.activeDeviceId && user.activeDeviceId !== deviceId) {
+        return res.status(409).json({
+          message: 'This account is already in use on another device. Log out on that device first, or contact the admin to reset your account device.',
+        });
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { activeDeviceId: deviceId, deviceLastSeenAt: new Date() },
+      });
+
+      const tokens = generateTokens(user.id, user.role, deviceId);
+      return res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, deviceId, ...tokens });
+    }
+
     const tokens = generateTokens(user.id, user.role);
 
     res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+// 2b. Logout — frees the account's device slot so another device can sign in
+export const logout = async (req: Request, res: Response) => {
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+  try {
+    // Only the currently bound device may release the lock; a stale token from
+    // an evicted device must not clear a newer device's binding.
+    await prisma.user.updateMany({
+      where: {
+        id: req.user.id,
+        ...(req.user.deviceId ? { activeDeviceId: req.user.deviceId } : {}),
+      },
+      data: { activeDeviceId: null, deviceLastSeenAt: null },
+    });
+
+    res.json({ message: 'Logged out' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ message: 'Logout failed' });
   }
 };
 
