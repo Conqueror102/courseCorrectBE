@@ -7,16 +7,18 @@ datasource db {
 }
 
 model User {
-  id          String       @id @default(uuid())
-  email       String       @unique
-  password    String
-  name        String
-  role        Role         @default(STUDENT)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  enrollments Enrollment[]
-  passkeys    Passkey[]
-  payments    Payment[]
+  id               String       @id @default(uuid())
+  email            String       @unique
+  password         String
+  name             String
+  role             Role         @default(STUDENT)
+  activeDeviceId   String?
+  deviceLastSeenAt DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  enrollments      Enrollment[]
+  passkeys         Passkey[]
+  payments         Payment[]
 }
 
 model Course {

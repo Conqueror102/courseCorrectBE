@@ -123,13 +123,23 @@ export const getStudents = async (req: Request, res: Response) => {
 // 3. Manage Student (Disable, Extend, Delete)
 export const manageStudent = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { action, days } = req.body; // action: 'disable' | 'extend' | 'delete'
+  const { action, days } = req.body; // action: 'disable' | 'extend' | 'delete' | 'reset-device'
 
   try {
     if (action === 'delete') {
       // Soft delete? User doesn't have deletedAt. Hard delete for now.
       await prisma.user.delete({ where: { id } });
       return res.json({ message: 'Student deleted' });
+    }
+
+    if (action === 'reset-device') {
+      // Frees the single-device lock so the student can sign in on a new device
+      // (used when they lose the old device or cleared their browser).
+      await prisma.user.update({
+        where: { id },
+        data: { activeDeviceId: null, deviceLastSeenAt: null },
+      });
+      return res.json({ message: 'Device reset — the student can now log in on a new device' });
     }
 
     // For Extend/Disable, we need relevant enrollment.
